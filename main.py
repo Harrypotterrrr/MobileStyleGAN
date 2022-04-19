@@ -1,5 +1,5 @@
 import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from utils.config import process_config
 from models import MappingNetwork
