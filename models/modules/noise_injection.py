@@ -7,6 +7,7 @@ class NoiseInjection(keras.Model):
 
     def __init__(self):
         super(NoiseInjection, self).__init__()
+        # TODO weight zeros used for?
         self.weight = tf.Variable(tf.zeros(1))
         self.trace_model = False
 

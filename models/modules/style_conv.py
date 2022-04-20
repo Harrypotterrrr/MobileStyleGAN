@@ -32,8 +32,8 @@ class StyledConv(keras.Model):
         self.noise = NoiseInjection()
         self.activate = FusedLeakyReLU(out_channel)
 
-    def call(self, input, style, noise = None):
-        out = self.conv(input, style)
+    def call(self, x, style, noise = None):
+        out = self.conv(x, style)
         out = self.noise(out, noise=noise)
         out = self.activate(out)
         return out

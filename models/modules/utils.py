@@ -9,11 +9,11 @@ from models.modules.upfirdn import upfirdn2d
 
 
 def make_kernel(k):
-    k = tf.Tensor(k, dtype=tf.float32)
+    k = tf.constant(k, dtype=tf.float32)
     # if len(k.shape) == 1: # TODO get_shape
-    if k.rank == 1:  # TODO get_shape
+    if tf.rank(k) == 1:  # TODO get_shape
         k = k[None, :] * k[:, None]
-    k /= k.sum()
+    k /= tf.reduce_sum(k)
     return k
 
 
@@ -78,12 +78,9 @@ class Blur(keras.Model):
     def __init__(self, kernel, pad, upsample_factor=1):
         super(Blur, self).__init__()
 
-        kernel = make_kernel(kernel)
-
+        self.kernel = make_kernel(kernel)
         if upsample_factor > 1:
-            kernel = kernel * (upsample_factor ** 2)
-
-        self.register_buffer('kernel', kernel)
+            self.kernel = self.kernel * (upsample_factor ** 2)
         self.pad = pad
 
     def call(self, x):
@@ -119,7 +116,6 @@ class ModulatedConv2d(keras.Model):
             p = (len(blur_kernel) - factor) - (kernel_size - 1)
             pad0 = (p + 1) // 2 + factor - 1
             pad1 = p // 2 + 1
-
             self.blur = Blur(blur_kernel, pad=(pad0, pad1), upsample_factor=factor)
 
         if downsample:
@@ -127,7 +123,6 @@ class ModulatedConv2d(keras.Model):
             p = (len(blur_kernel) - factor) + (kernel_size - 1)
             pad0 = (p + 1) // 2
             pad1 = p // 2
-
             self.blur = Blur(blur_kernel, pad=(pad0, pad1))
 
         fan_in = in_channel * kernel_size ** 2
@@ -136,7 +131,7 @@ class ModulatedConv2d(keras.Model):
 
         self.weight = tf.Variable(
             tf.random.normal([1, out_channel, in_channel, kernel_size, kernel_size]
-                             ))
+        ))
         self.modulation = EqualLinear(style_dim, in_channel, bias_init=1)
 
         self.demodulate = demodulate
@@ -144,43 +139,41 @@ class ModulatedConv2d(keras.Model):
     def call(self, x, style):
         B, C_in, H, W = x.shape
 
-        style = tf.reshape(self.modulation(style), [B, 1, C_in, 1, 1])
-        weight = self.scale * self.weight * style
+        style = tf.reshape(self.modulation(style), [B, 1, C_in, 1, 1]) # TODO shape[1]?
+        self.weight = self.scale * self.weight * style
 
         if self.demodulate:
-            demod = tf.math.rsqrt(weight.pow(2).sum([2, 3, 4]) + 1e-8)
-            weight = weight * demod.reshape(B, self.out_channel, 1, 1, 1)
+            demod = tf.math.rsqrt(tf.reduce_sum(self.weight ** 2, axis = [2 , 3, 4]) + self.eps)
+            self.weight = self.weight * tf.reshape(demod, [B, self.out_channel, 1, 1, 1])
 
-        weight = weight.view(
-            B * self.out_channel, C_in, self.kernel_size, self.kernel_size
-        )
+        self.weight = tf.reshape(self.weight, [B * self.out_channel, C_in, self.kernel_size, self.kernel_size])
 
         if self.upsample:
-            x = x.reshape(1, B * C_in, H, W)
-            weight = weight.reshape(
-                B, self.out_channel, C_in, self.kernel_size, self.kernel_size
-            )
-            weight = weight.transpose(1, 2).reshape(
-                B * C_in, self.out_channel, self.kernel_size, self.kernel_size
-            )
-            out = nn.conv2d_transpose(x, weight, padding=0, stride=2, groups=B)
+            x = tf.reshape(x, [1, B * C_in, H, W])
+            self.weight = tf.reshape(self.weight, [B, self.out_channel, C_in, self.kernel_size, self.kernel_size])
+            self.weight = tf.reshape(tf.transpose(self.weight, [1, 2]), [B * C_in, self.out_channel, self.kernel_size, self.kernel_size])
+
+            # out = nn.conv2d_transpose(x, self.weight., stride=2, padding=0, groups=B) TODO: groups : B
+            out = nn.conv2d_transpose(x, self.weight, stride=2, padding=0)
             _, _, H, W = out.shape
-            out = out.reshape(B, self.out_channel, H, W)
+            out = tf.reshape(out, [B, self.out_channel, H, W])
             out = self.blur(out)
 
         elif self.downsample:
             x = self.blur(x)
             _, _, H, W = x.shape
-            x = x.reshape(1, B * C_in, H, W)
-            out = nn.conv2d(x, weight, padding=0, stride=2, groups=B)
+            x = tf.reshape(x, [1, B * C_in, H, W])
+            #out = nn.conv2d(x, self.weight, padding=0, stride=2, groups=B) TODO: groups = B
+            out = nn.conv2d(x, self.weight, padding=0, stride=2)
             _, _, H, W = out.shape
-            out = out.reshape(B, self.out_channel, H, W)
+            out = tf.reshape(out, [B, self.out_channel, H, W])
 
         else:
-            x = x.view(1, B * C_in, H, W)
-            out = nn.conv2d(x, weight, padding=self.padding, groups=B)
+            x = tf.reshape(x, [1, B * C_in, H, W])
+            # out = nn.conv2d(x, self.weight, padding=self.padding, groups=B) TODO: groups = B
+            out = nn.conv2d(x, self.weight, padding=self.padding)
             _, _, H, W = out.shape
-            out = out.view(B, self.out_channel, H, W)
+            out = tf.reshape(out, [B, self.out_channel, H, W])
 
         return out
 
@@ -189,11 +182,12 @@ class ConstantInput(keras.Model):
 
     def __init__(self, channel, size=4):
         super(ConstantInput, self).__init__()
-        self.input_const = tf.Variable(tf.random.normal([1, channel, size, size]))
+        # TODO, change tf.Variable to tf.constant
+        self.const_input = tf.Variable(tf.random.normal([1, channel, size, size]))
 
     def call(self, x):
         B = x.shape[0]
-        out = tf.tile(self.input_const, [B, 1, 1, 1])
+        out = tf.tile(self.const_input, [B, 1, 1, 1])
         return out
 
 
