@@ -4,7 +4,7 @@
 - [x] NoiseInjection
 - [ ] Blur
 - [x] make_kernel
-- [ ] upfirdn2d_cpu
+- [x] upfirdn2d_cpu
 - [ ] ModulatedConv2d
 - [ ] StyledConv2d
 - [ ] MappingNetwork
