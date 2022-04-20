@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow import keras
+import tensorflow.keras as keras
 
 from models.modules.style_conv import StyledConv, StyledConv2d
 from models.modules.utils import ConstantInput, ModulatedConv2d
@@ -39,7 +39,7 @@ class MobileSynthesisBlock(keras.Model):
             kernel_size=1
         )
 
-    def __call__(self, x, style, noise=[None, None]):
+    def call(self, x, style, noise=[None, None]):
         x = self.up(x, style if style.rank == 2 else style[:, 0, :])
         x = self.conv1(x, style if style.rank == 2 else style[:, 0, :], noise=noise[0])
         x = self.conv2(x, style if style.rank == 2 else style[:, 1, :], noise=noise[1])
@@ -53,10 +53,10 @@ class MobileSynthesisNetwork(keras.Model):
         style_dim,
         channels = [512, 512, 512, 512, 512, 256, 128, 64]
     ):
-        super().__init__()
+        super(MobileSynthesisNetwork, self).__init__()
         self.style_dim = style_dim
 
-        self.input = ConstantInput(channels[0])
+        self.input_const = ConstantInput(channels[0])
         self.conv1 = StyledConv2d(
             channels[0],
             channels[0],
@@ -88,11 +88,11 @@ class MobileSynthesisNetwork(keras.Model):
         self.register_buffer("device_info", torch.zeros(1))
         self.trace_model = False
 
-    def forward(self, style, noise=None):
+    def call(self, style, noise=None):
         out = {"noise": [], "freq": [], "img": None}
         noise = NoiseManager(noise, self.device_info.device, self.trace_model)
 
-        hidden = self.input(style)
+        hidden = self.input_const(style)
         out["noise"].append(noise(hidden.size(-1)))
         hidden = self.conv1(hidden, style if style.ndim == 2 else style[:, 0, :], noise=out["noise"][-1])
         img = self.to_img1(hidden, style if style.ndim == 2 else style[:, 1, :])

@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow import keras
+import tensorflow.keras as keras
 from tensorflow.keras import layers, initializers
 
 # TODO
@@ -32,7 +32,7 @@ class DWTInverse(keras.Model):
         self.mode = mode
         self.trace_model = trace_model
 
-    def __call__(self, coeffs):
+    def call(self, coeffs):
         """
         Args:
             coeffs (yl, yh): tuple of lowpass and bandpass coefficients, where:
@@ -90,7 +90,7 @@ class IDWTUpsample(keras.Model):
         )
         self.modulation.bias.data.fill_(1.0)
 
-    def __call__(self, x, style):
+    def call(self, x, style):
         b, _, h, w = x.size()
         x = self.modulation(style).reshape(b, -1, 1, 1) * x
         low = x[:, :self.channels]

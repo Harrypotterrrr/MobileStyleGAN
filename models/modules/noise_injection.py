@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from tensorflow import nn
-from tensorflow import keras
+import tensorflow.keras as keras
 
 class NoiseInjection(keras.Model):
 
@@ -10,7 +10,7 @@ class NoiseInjection(keras.Model):
         self.weight = tf.Variable(tf.zeros(1))
         self.trace_model = False
 
-    def __call__(self, image, noise=None):
+    def call(self, image, noise=None):
         if noise is None:
             # batch, _, height, width = image.shape
             # noise = image.new_empty(batch, 1, height, width).normal_()

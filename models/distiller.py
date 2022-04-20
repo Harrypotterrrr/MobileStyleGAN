@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow import keras
+import tensorflow.keras as keras
 
 from models.mapping_network import MappingNetwork
 from models.synthesis_network import SynthesisNetwork
@@ -22,7 +22,7 @@ class Distiller(keras.Model):
         self.mapping_net = MappingNetwork(mapping_net_conf["style_dim"], mapping_net_conf["n_layers"])
         self.synthesis_net = SynthesisNetwork(synthesis_net_conf["size"], synthesis_net_conf["style_dim"])
 
-    def __call__(self, x, truncated=False, generator="student"):
+    def call(self, x, truncated=False, generator="student"):
 
         # x to gpu
         #x = x.to(self.device_info.device)

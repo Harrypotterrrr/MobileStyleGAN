@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow import keras
+import tensorflow.keras as keras
 
 from models.modules.utils import PixelNorm, EqualLinear
 
@@ -13,12 +13,19 @@ class MappingNetwork(keras.Model):
     ):
         super(MappingNetwork, self).__init__()
         self.style_dim = style_dim
-        layers = [PixelNorm()]
-        for i in range(n_layers):
-            layers.append(
-                EqualLinear(style_dim, style_dim, lr_mul = lr_mlp, activation="fused_lrelu")
-            )
-        self.layers = keras.Sequential(*layers)
+        # layer_list = [PixelNorm()]
 
-    def __call__(self, x):
-        return self.layers(x)
+        self.model = tf.keras.Sequential()
+        self.model.add(PixelNorm())
+
+        for i in range(n_layers):
+            # layer_list.append(
+            #     EqualLinear(style_dim, style_dim, lr_mul = lr_mlp, activation="fused_lrelu")
+            # )
+            self.model.add(EqualLinear(style_dim, style_dim, lr_mul = lr_mlp, activation="fused_lrelu"))
+
+        # self.layer_list = keras.Sequential(layer_list)
+
+    def call(self, x):
+        return self.model(x)
+        # return self.layer_list(x)

@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow import keras
+import tensorflow.keras as keras
 
 from models.modules.utils import ModulatedConv2d
 
@@ -16,7 +16,7 @@ class MultichannelIamge(keras.Model):
         self.conv = ModulatedConv2d(channels_in, channels_out, style_dim, kernel_size, demodulate=False)
         self.bias = tf.Variable(tf.zeros([1, channels_out, 1, 1]))
 
-    def __call__(self, hidden, style):
+    def call(self, hidden, style):
         out = self.conv(hidden, style)
         out = out + self.bias
         return out

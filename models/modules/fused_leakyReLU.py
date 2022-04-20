@@ -1,7 +1,7 @@
 import tensorflow as tf
-from tensorflow import nn
 
-from tensorflow import keras
+from tensorflow import nn
+import tensorflow.keras as keras
 
 
 class FusedLeakyReLU(keras.Model):
@@ -18,7 +18,7 @@ class FusedLeakyReLU(keras.Model):
         self.scale = scale
         self.trace_model = trace_model
 
-    def __call__(self, input):
+    def call(self, input):
         return fused_leaky_relu(input, self.bias, self.negative_slope, self.scale, self.trace_model)
 
 def fused_leaky_relu(input, bias, negative_slope=0.2, scale=2 ** 0.5, trace_model=False):

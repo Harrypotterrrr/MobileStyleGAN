@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow import keras
+import tensorflow.keras as keras
 
 from models.modules.style_conv import StyledConv, StyledConv2d
 from models.modules.utils import ConstantInput, ToRGB, Upsample
@@ -32,7 +32,7 @@ class SynthesisBlock(keras.Model):
         )
         self.to_rgb = ToRGB(out_channel, style_dim)
 
-    def __call__(self, x, style, noise=[None, None]):
+    def call(self, x, style, noise=[None, None]):
         x = self.conv1(x, style if style.rank == 2 else style[:, 0, :], noise=noise[0])
         x = self.conv2(x, style if style.rank == 2 else style[:, 1, :], noise=noise[1])
         rgb = self.to_rgb(x, style if style.rank == 2 else style[:, 2, :])
@@ -72,7 +72,7 @@ class SynthesisNetwork(keras.Model):
 
         self.upsample = Upsample(blur_kernel)
 
-    def __call__(self, style, noise=None):
+    def call(self, style, noise=None):
         out = {"noise": [], "rgb": [], "img": None}
 
         hidden = self.input(style)

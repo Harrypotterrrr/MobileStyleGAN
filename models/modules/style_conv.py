@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from tensorflow import nn
-from tensorflow import keras
+import tensorflow.keras as keras
 
 from models.modules.utils import ModulatedConv2d
 from models.modules.noise_injection import NoiseInjection
@@ -32,7 +32,7 @@ class StyledConv(keras.Model):
         self.noise = NoiseInjection()
         self.activate = FusedLeakyReLU(out_channel)
 
-    def __call__(self, input, style, noise = None):
+    def call(self, input, style, noise = None):
         out = self.conv(input, style)
         out = self.noise(out, noise=noise)
         out = self.activate(out)
@@ -47,8 +47,8 @@ class StyledConv2d(keras.Model):
         channels_out,
         style_dim,
         kernel_size,
-        demodulate=True,
-        conv_module=ModulatedConv2d
+        demodulate = True,
+        conv_module = ModulatedConv2d
     ):
         super(StyledConv2d, self).__init__()
 
@@ -64,7 +64,7 @@ class StyledConv2d(keras.Model):
         self.bias = tf.Variable(tf.zeros([1, channels_out, 1, 1]))
         self.act = nn.leaky_relu(0.2)
 
-    def __call__(self, x, style, noise=None):
+    def call(self, x, style, noise=None):
         out = self.conv(x, style)
         out = self.noise(out, noise=noise)
         out = self.act(out + self.bias)

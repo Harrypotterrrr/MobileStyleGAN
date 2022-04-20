@@ -1,4 +1,6 @@
-from distiller import Distiller
-from mapping_network import MappingNetwork
-from synthesis_network import SynthesisNetwork
-from mobile_synthesis_network import MobileSynthesisNetwork
+from models.distiller import Distiller
+from models.mapping_network import MappingNetwork
+from models.synthesis_network import SynthesisNetwork
+from models.mobile_synthesis_network import MobileSynthesisNetwork
+
+from models.modules import *
