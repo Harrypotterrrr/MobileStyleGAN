@@ -1,8 +1,9 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 
+from models.modules.to_rgb import ToRGB
 from models.modules.style_conv import StyledConv
-from models.modules.utils import ConstantInput, ToRGB, Upsample
+from models.modules.utils import ConstantInput, Upsample
 
 
 class SynthesisBlock(keras.Model):
@@ -50,13 +51,11 @@ class SynthesisBlock(keras.Model):
 class SynthesisNetwork(keras.Model):
 
     def __init__(self,
-        size,
         style_dim,
         blur_kernel = [1, 3, 3, 1],
         channels = [512, 512, 512, 512, 512, 256, 128, 64, 32] # optimize
     ):
-        super().__init__()
-        self.size = size
+        super(SynthesisNetwork, self).__init__()
         self.style_dim = style_dim
 
         self.const_input = ConstantInput(channels[0])
@@ -91,7 +90,7 @@ class SynthesisNetwork(keras.Model):
 
         # generate noise
         if noise_input is None:
-            noise = tf.random.normal([1, 1, const_input.size(-1), const_input.size(-1)])
+            noise = tf.random.normal([1, const_input.shape[1], const_input.shape[1], 1])
         else:
             noise = noise_input[0]
         rtn["noise"].append(noise)
@@ -99,19 +98,25 @@ class SynthesisNetwork(keras.Model):
         # const, style, noise fed into the first style block
         if tf.rank(style) == 2:
             hidden = self.style_conv(const_input, style, noise=noise)
+            print("hidden", hidden.shape)
+            print("style", style.shape)
             out = self.to_rgb(hidden, style)
         else:
             hidden = self.style_conv(const_input,style[:, 0, :], noise=noise)
             out = self.to_rgb(hidden,style[:, 1, :])
         rtn["rgb"].append(out)
 
+        print("!!!!!!!!!!!!!", out.shape)
+        print("!!!!!!!!!!!!!", hidden.shape)
+
         # residual blocks
         for i, res_block in enumerate(self.res_blocks):
-            shape = [2, 1, 1, 2 ** (i + 3), 2 ** (i + 3)] # TODO: optimize
+            shape_list = [2, 1, 1, 2 ** (i + 3), 2 ** (i + 3)] # TODO: optimize
             if noise_input is None:
-                noise = tf.random.normal(*shape)
+                noise = tf.random.normal(shape_list)
             else:
                 noise = noise_input[i + 1]
+            print(i,"noise", noise.shape)
             hidden, rgb = res_block(hidden, style, noise)
             rtn["noise"].append(noise)
             rtn["rgb"].append(rgb)
