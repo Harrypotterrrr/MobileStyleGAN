@@ -2,10 +2,7 @@ import math
 import tensorflow as tf
 import tensorflow.keras as keras
 
-from tensorflow import nn
-
-
-from models.modules.upfirdn import upfirdn2d
+from models.modules import *
 
 
 def make_kernel(k):
@@ -29,53 +26,46 @@ class PixelNorm(keras.Model):
         )
 
 
-class EqualLinear(keras.Model):
+class NonlinearTransform(keras.Model):
 
     def __init__(
             self,
-            in_dim,
-            out_dim,
-            bias=True,
-            bias_init = 0.,
+            in_ch,
+            out_ch,
+            bias = True,
+            bias_init = 0.0,
             lr_mul = 1,
             activation = None,
-            onnx_trace = False
     ):
-        super(EqualLinear, self).__init__()
+        super(NonlinearTransform, self).__init__()
 
-        self.weight = tf.Variable(tf.math.divide(
-            tf.random.normal([in_dim, out_dim]),
-            lr_mul
-        ))
+        # TODO: lr_mul, math.sqrt(in_dim) meaning
+        self.scale = (1 / math.sqrt(in_ch)) * lr_mul
+        self.weight = tf.Variable(tf.math.divide(tf.random.normal([in_ch, out_ch]), lr_mul))
+        self.weight = self.weight * self.scale
 
         if bias:
-            self.bias = tf.Variable(tf.fill(out_dim, bias_init), dtype=tf.float32)
-            self.bias = tf.reshape(self.bias, [1, out_dim])
+            self.bias = tf.Variable(tf.fill(in_ch, bias_init), dtype=tf.float32)
+            self.bias = tf.reshape(self.bias, [1, out_ch])
+            self.bias = self.bias * lr_mul
         else:
-            self.bias = None
+            self.bias = 0.0
         self.activation = activation
 
-        ## TODO: meaning
-        self.scale = (1 / math.sqrt(in_dim)) * lr_mul
-        self.lr_mul = lr_mul
-        self.onnx_trace = onnx_trace
+    def call(self, style):
+        # style.shape (Batch, style_dim, in_channel)
 
-    def call(self, x):
-
+        out = tf.matmul(style, self.weight) + self.bias
+        # TODO fused_leaky_relu
+        #  out = fused_leaky_relu(out, self.bias * self.lr_mul, onnx_trace=self.onnx_trace)
         if self.activation:
-            out = tf.matmul(x, self.weight * self.scale)
-            out = out + (self.bias * self.lr_mul)
             out = tf.nn.leaky_relu(out, alpha=0.2)
-            # TODO fused_leaky_relu
-            #  out = fused_leaky_relu(out, self.bias * self.lr_mul, onnx_trace=self.onnx_trace)
-        else:
-            out = tf.matmul(self.weight * self.scale, x) + (self.bias * self.lr_mul)
         return out
 
 
 class Blur(keras.Model):
 
-    def __init__(self, kernel, pad, upsample_factor=1):
+    def __init__(self, kernel, pad, upsample_factor = 1):
         super(Blur, self).__init__()
 
         self.kernel = make_kernel(kernel)
@@ -85,96 +75,7 @@ class Blur(keras.Model):
 
     def call(self, x):
         # TODO CUDA upfirdn2d
-        # out = upfirdn2d(x, self.kernel, pad=self.pad)
         out = upfirdn2d(x, self.kernel, pad=self.pad)
-        return out
-
-
-class ModulatedConv2d(keras.Model):
-
-    def __init__(
-            self,
-            in_channel,
-            out_channel,
-            kernel_size,
-            style_dim,
-            demodulate = True,
-            upsample = False,
-            downsample = False,
-            blur_kernel = [1, 3, 3, 1],
-    ):
-        super(ModulatedConv2d, self).__init__()
-        self.eps = 1e-8
-        self.kernel_size = kernel_size
-        self.in_channel = in_channel
-        self.out_channel = out_channel
-        self.upsample = upsample
-        self.downsample = downsample
-
-        if upsample:
-            factor = 2
-            p = (len(blur_kernel) - factor) - (kernel_size - 1)
-            pad0 = (p + 1) // 2 + factor - 1
-            pad1 = p // 2 + 1
-            self.blur = Blur(blur_kernel, pad=(pad0, pad1), upsample_factor=factor)
-
-        if downsample:
-            factor = 2
-            p = (len(blur_kernel) - factor) + (kernel_size - 1)
-            pad0 = (p + 1) // 2
-            pad1 = p // 2
-            self.blur = Blur(blur_kernel, pad=(pad0, pad1))
-
-        fan_in = in_channel * kernel_size ** 2
-        self.scale = 1 / math.sqrt(fan_in)
-        self.padding = kernel_size // 2
-
-        self.weight = tf.Variable(
-            tf.random.normal([1, out_channel, in_channel, kernel_size, kernel_size]
-        ))
-        self.modulation = EqualLinear(style_dim, in_channel, bias_init=1)
-
-        self.demodulate = demodulate
-
-    def call(self, x, style):
-        B, C_in, H, W = x.shape
-
-        style = tf.reshape(self.modulation(style), [B, 1, C_in, 1, 1]) # TODO shape[1]?
-        self.weight = self.scale * self.weight * style
-
-        if self.demodulate:
-            demod = tf.math.rsqrt(tf.reduce_sum(self.weight ** 2, axis = [2 , 3, 4]) + self.eps)
-            self.weight = self.weight * tf.reshape(demod, [B, self.out_channel, 1, 1, 1])
-
-        self.weight = tf.reshape(self.weight, [B * self.out_channel, C_in, self.kernel_size, self.kernel_size])
-
-        if self.upsample:
-            x = tf.reshape(x, [1, B * C_in, H, W])
-            self.weight = tf.reshape(self.weight, [B, self.out_channel, C_in, self.kernel_size, self.kernel_size])
-            self.weight = tf.reshape(tf.transpose(self.weight, [1, 2]), [B * C_in, self.out_channel, self.kernel_size, self.kernel_size])
-
-            # out = nn.conv2d_transpose(x, self.weight., stride=2, padding=0, groups=B) TODO: groups : B
-            out = nn.conv2d_transpose(x, self.weight, stride=2, padding=0)
-            _, _, H, W = out.shape
-            out = tf.reshape(out, [B, self.out_channel, H, W])
-            out = self.blur(out)
-
-        elif self.downsample:
-            x = self.blur(x)
-            _, _, H, W = x.shape
-            x = tf.reshape(x, [1, B * C_in, H, W])
-            #out = nn.conv2d(x, self.weight, padding=0, stride=2, groups=B) TODO: groups = B
-            out = nn.conv2d(x, self.weight, padding=0, stride=2)
-            _, _, H, W = out.shape
-            out = tf.reshape(out, [B, self.out_channel, H, W])
-
-        else:
-            x = tf.reshape(x, [1, B * C_in, H, W])
-            # out = nn.conv2d(x, self.weight, padding=self.padding, groups=B) TODO: groups = B
-            out = nn.conv2d(x, self.weight, padding=self.padding)
-            _, _, H, W = out.shape
-            out = tf.reshape(out, [B, self.out_channel, H, W])
-
         return out
 
 
@@ -183,29 +84,23 @@ class ConstantInput(keras.Model):
     def __init__(self, channel, size=4):
         super(ConstantInput, self).__init__()
         # TODO, change tf.Variable to tf.constant
-        self.const_input = tf.Variable(tf.random.normal([1, channel, size, size]))
+        self.const_input = tf.constant(tf.random.normal([1, channel, size, size]))
 
     def call(self, x):
-        B = x.shape[0]
-        out = tf.tile(self.const_input, [B, 1, 1, 1])
+        out = tf.tile(self.const_input, [x.shape[0], 1, 1, 1])
         return out
 
 
 class Upsample(keras.Model):
 
-    def __init__(self, kernel, factor=2):
+    def __init__(self, kernel, factor = 2):
         super(Upsample, self).__init__()
 
         self.factor = factor
-        kernel = make_kernel(kernel) * (factor ** 2)
-        self.register_buffer('kernel', kernel)  # TODO register_buffer
+        self.kernel = make_kernel(kernel) * (factor ** 2)
 
-        p = kernel.shape[0] - factor
-
-        pad0 = (p + 1) // 2 + factor - 1
-        pad1 = p // 2
-
-        self.pad = (pad0, pad1)
+        pad = kernel.shape[0] - factor
+        self.pad = ((pad + 1) // 2 + factor - 1, pad // 2)
 
     def call(self, x):
         return upfirdn2d(x, self.kernel, up=self.factor, down=1, pad=self.pad)
@@ -225,7 +120,7 @@ class ToRGB(keras.Model):
         if upsample:
             self.upsample = Upsample(blur_kernel)
 
-        self.conv = ModulatedConv2d(in_channel, 3, 1, style_dim, demodulate=False)
+        self.conv = ModulatedConv(in_channel, 3, 1, style_dim, demodulate=False)
         self.bias = tf.Variable(tf.zeros([1, 3, 1, 1]))
 
     def call(self, x, style, skip=None):
@@ -234,4 +129,17 @@ class ToRGB(keras.Model):
         if skip is not None:
             skip = self.upsample(skip)
             out = out + skip
+        return out
+
+class NoiseInjection(keras.Model):
+
+    def __init__(self):
+        super(NoiseInjection, self).__init__()
+        # TODO weight zeros used for?
+        self.weight = tf.Variable(tf.zeros(1))
+
+    def call(self, x, noise=None):
+        if noise is None:
+            noise = tf.random.normal(x.shape)
+        out = x + self.weight * noise
         return out
