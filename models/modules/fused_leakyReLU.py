@@ -10,16 +10,16 @@ class FusedLeakyReLU(keras.Model):
             channel,
             negative_slope=0.2,
             scale=2 ** 0.5,
-            trace_model=False
     ):
         super().__init__()
         self.bias = tf.Variable(tf.zeros(channel))
         self.negative_slope = negative_slope
         self.scale = scale
-        self.trace_model = trace_model
 
     def call(self, input):
-        return fused_leaky_relu(input, self.bias, self.negative_slope, self.scale, self.trace_model)
+        # TODO: CUDA
+        # return fused_leaky_relu(input, self.bias, self.negative_slope, self.scale, self.trace_model)
+        return nn.leaky_relu(input, 0.2)
 
 def fused_leaky_relu(input, bias, negative_slope=0.2, scale=2 ** 0.5, trace_model=False):
 
