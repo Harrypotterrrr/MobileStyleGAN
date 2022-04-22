@@ -21,6 +21,7 @@ class FusedLeakyReLU(keras.Model):
         # return fused_leaky_relu(input, self.bias, self.negative_slope, self.scale, self.trace_model)
         return nn.leaky_relu(input, 0.2)
 
+
 def fused_leaky_relu(input, bias, negative_slope=0.2, scale=2 ** 0.5, trace_model=False):
 
     if len(tf.config.list_physical_devices('GPU')) != 0:

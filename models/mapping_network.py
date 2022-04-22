@@ -1,7 +1,8 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 
-from models.modules.utils import PixelNorm, EqualLinear
+from models.modules.utils import PixelNorm, LinearTransform
+
 
 class MappingNetwork(keras.Model):
 
@@ -22,7 +23,7 @@ class MappingNetwork(keras.Model):
             # layer_list.append(
             #     EqualLinear(style_dim, style_dim, lr_mul = lr_mlp, activation="fused_lrelu")
             # )
-            self.model.add(EqualLinear(style_dim, style_dim, lr_mul = lr_mlp, activation="fused_lrelu"))
+            self.model.add(LinearTransform(style_dim, style_dim, lr_mul = lr_mlp, activation="fused_lrelu"))
 
         # self.layer_list = keras.Sequential(layer_list)
 
