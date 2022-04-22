@@ -1,8 +1,9 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 
+from models.modules.utils import ConstantInput
+from models.modules.modulated_conv import ModulatedConv
 from models.modules.style_conv import StyledConv, StyledConv2d
-from models.modules.utils import ConstantInput, ModulatedConv2d
 from models.modules.multichannel_image import MultichannelIamge
 
 
@@ -14,7 +15,7 @@ class MobileSynthesisBlock(keras.Model):
         channels_out,
         style_dim,
         kernel_size=3,
-        conv_module=ModulatedConv2d
+        conv_module=ModulatedConv
     ):
         super(MobileSynthesisBlock, self).__init__()
         self.up = IDWTUpsaplme(channels_in, style_dim)
